@@ -1,27 +1,27 @@
-import sys
 import argparse
+import logging
 
-if "./lib" not in sys.path:
-    sys.path.append("./lib")
+from lib.DQL_visualization_actions import visualizing_seq_act
 
-from lib.DQL_visualization_actions import *
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
-if __name__== "__main__":
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-    parser = argparse.ArgumentParser(description='Visualizing sequence of actions')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Visualize sequence of actions')
 
-    parser.add_argument('-m','--model_name', type=str, default='default_model', help='The model parameters that will be loaded for testing. Do not forget to put the model under the path ../experiments/model_name. Default: default_model')
-    parser.add_argument('-i','--image_path', type=str, default=None, help='Path to an image.')
-    parser.add_argument('-g','--ground_truth', type=int, nargs='+', default=[0,0,1,1], help='Target coordinates. The order of coordinates should be like: xmin ymin xmax ymax. Default: 0 0 1 1')
-    parser.add_argument('-n','--name', type=str, default="anim", help='Name of the output file. It will be stored in ../experiments/model_name/anim/')
+    parser.add_argument('-m', '--model_name', type=str, default='default_model',
+                        help="Model name to load. Default: default_model")
+    parser.add_argument('-i', '--image_path', type=str, default=None,
+                        help="Path to an image.")
+    parser.add_argument('-g', '--ground_truth', type=int, nargs='+', default=[0, 0, 1, 1],
+                        help="Target coordinates: xmin ymin xmax ymax. Default: 0 0 1 1")
+    parser.add_argument('-n', '--name', type=str, default="anim",
+                        help="Output file name. Default: anim")
 
     args = parser.parse_args()
-    
-    print(args.ground_truth)
-    visualizing_seq_act(args.model_name,
-	args.image_path,
-	args.ground_truth,
-	args.name)
 
-
-
+    visualizing_seq_act(
+        args.model_name, args.image_path, args.ground_truth, args.name,
+    )

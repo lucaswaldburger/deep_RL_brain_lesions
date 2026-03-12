@@ -1,99 +1,70 @@
-import numpy as np
+import logging
 import os
-import sys
-import psutil
+
+import numpy as np
 import tensorflow as tf
 from PIL import Image
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 
-from ReadData import *
-from DNN import *
-from Agent import ObjLocaliser
+from config import DEFAULT_CONFIG
+from lib.Agent import ObjLocaliser
+from lib.session_utils import setup_model, load_checkpoint
+
+logger = logging.getLogger(__name__)
+
 
 def plotNNFilter(units, model_name, layer_num):
-	"""
-	Helper function to visualize conv layers
+    """Save visualizations of convolutional layer filters.
 
-	Args:
-		units: Conv layer filters
-		model_name: Model name that is used to visualize its layer
-		layer_num: Layer number to be visualized
-	"""
+    Args:
+        units: Convolutional layer activations.
+        model_name: Model name (used for output path).
+        layer_num: Layer number being visualized.
+    """
+    filters = units.shape[3]
+    experiment_dir = os.path.join(
+        DEFAULT_CONFIG.experiments_dir, model_name, "visu", "layer_{}".format(layer_num),
+    )
+    if not os.path.exists(experiment_dir):
+        os.makedirs(experiment_dir)
 
-	filters = units.shape[3]
-	if not os.path.exists('../experiments/{}/visu/layer_{}'.format(model_name, layer_num)):
-		os.makedirs('../experiments/{}/visu/layer_{}'.format(model_name, layer_num))
+    for i in range(filters):
+        fig = plt.figure(1, figsize=(10, 10))
+        plt.imshow(units[0, :, :, i], interpolation="nearest", cmap="gray")
+        fig.suptitle('layer{} filter{}'.format(layer_num, i + 1), fontsize=60)
+        fig.savefig(os.path.join(
+            experiment_dir, 'layer{}filter{}.png'.format(layer_num, i + 1),
+        ))
+        plt.close()
+        logger.info("Filter %d plotted.", i)
 
-	for i in range(filters):
-		fig = plt.figure(1, figsize=(10,10))
-		plt.imshow(units[0,:,:,i], interpolation="nearest", cmap="gray")
-		fig.suptitle('layer{} filter{}'.format(layer_num, i+1), fontsize=60)
-		fig.savefig('../experiments/{}/visu/layer_{}/layer{}filter{}.png'.format(model_name,layer_num,layer_num, i+1))
-		plt.close()
-		print("filter {} is plotted.".format(i))
-		print("The plots can be found in ../experiments/{}/visu/layer_{}".format(model_name, layer_num))
+    logger.info("Plots saved to %s", experiment_dir)
+
 
 def visualize_layers(model_name, add, layer_num):
-	"""
-	Visualizing sequence of actions 
+    """Visualize CNN layer activations for a given image.
 
-	Args:
-		model_name: The model parameters that will be loaded for visualizing.
-		add: Path to an image
-		layer_num: Layer number to be visualized
-	"""
+    Args:
+        model_name: Model to load for visualization.
+        add: Path to the input image.
+        layer_num: Layer number to visualize ('1', '2', or '3').
+    """
+    experiment_dir, q_estimator, state_processor, policy = setup_model(model_name)
 
-    # Initiates Tensorflow graph
-	tf.reset_default_graph()
+    with tf.Session() as sess:
+        sess.run(tf.initialize_all_variables())
+        load_checkpoint(sess, experiment_dir, subdir="bestModel")
 
-	# Where we save our checkpoints and graphs
-	experiment_dir = os.path.abspath("../experiments/{}".format(model_name))
+        im2 = np.array(Image.open(add))
+        dummy_target = {'xmin': [0], 'xmax': [1], 'ymin': [0], 'ymax': [1]}
+        env = ObjLocaliser(np.array(im2), dummy_target)
 
-	# Create a glboal step variable
-	global_step = tf.Variable(0, name='global_step', trainable=False)
-	    
-	# Create estimators
-	q_estimator = Estimator(scope="q_estimator", summaries_dir=experiment_dir)
+        env.Reset(np.array(im2))
+        state = env.wrapping()
+        state = state_processor.process(sess, state)
+        state = np.stack([state] * 4, axis=2)
 
-	# State processor
-	state_processor = StateProcessor()
-
-	with tf.Session() as sess:
-		# For 'system/' summaries, usefull to check if currrent process looks healthy
-		current_process = psutil.Process()
-
-		# Create directories for checkpoints and summaries
-		checkpoint_dir = os.path.join(experiment_dir, "bestModel")
-		checkpoint_path = os.path.join(checkpoint_dir, "model")
-
-		# Initiates a saver and loads previous saved model if one was found
-		saver = tf.train.Saver()
-		latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
-		if latest_checkpoint:
-			print("Loading model checkpoint {}...\n".format(latest_checkpoint))
-			saver.restore(sess, latest_checkpoint)
-
-		# The policy we're following
-		policy = make_epsilon_greedy_policy(
-		q_estimator,
-		len(VALID_ACTIONS))
-
-		# Creates an object localizer instance
-		im2 = np.array(Image.open(add))
-		env = ObjLocaliser(np.array(im2),{'xmin':[0], 'xmax':[1], 'ymin':[0], 'ymax':[1]})
-
-
-		# Reset the environment
-		env.Reset(np.array(im2))
-		state = env.wrapping()
-		state = state_processor.process(sess, state)
-		state = np.stack([state] * 4, axis=2)
-
-		# Visualizing the network layers
-		layer = q_estimator.visulize_layers(sess, state.reshape((-1, 84, 84, 4)), layer_num)
-		plotNNFilter(layer, model_name, layer_num)
-
-
-
-
+        dim = DEFAULT_CONFIG.dimension
+        layer = q_estimator.visualize_layers(sess, state.reshape((-1, dim, dim, 4)), layer_num)
+        plotNNFilter(layer, model_name, layer_num)

@@ -1,31 +1,25 @@
 import os
+
 import numpy as np
+
+from config import DEFAULT_CONFIG
 
 DEFAULT_SEED = 123456
 
-"""Data providers.
-This module provides classes for loading datasets and iterating over batches of
-data points.
-"""
-class DataProvider(object):
-    """Generic data provider."""
+
+class DataProvider:
+    """Generic data provider with batching, shuffling, and iteration."""
 
     def __init__(self, inputs, targets, batch_size, max_num_batches=-1,
                  shuffle_order=True, rng=None):
-        """Create a new data provider object.
+        """
         Args:
-            inputs (ndarray): Array of data input features of shape
-                (num_data, input_dim).
-            targets (ndarray): Array of data output targets of shape
-                (num_data, output_dim) or (num_data,) if output_dim == 1.
-            batch_size (int): Number of data points to include in each batch.
-            max_num_batches (int): Maximum number of batches to iterate over
-                in an epoch. If `max_num_batches * batch_size > num_data` then
-                only as many batches as the data can be split into will be
-                used. If set to -1 all of the data will be used.
-            shuffle_order (bool): Whether to randomly permute the order of
-                the data before each epoch.
-            rng (RandomState): A seeded random number generator.
+            inputs: Array of data input features of shape (num_data, input_dim).
+            targets: Array of data output targets.
+            batch_size: Number of data points per batch.
+            max_num_batches: Maximum batches per epoch (-1 for all data).
+            shuffle_order: Whether to shuffle data before each epoch.
+            rng: A seeded random number generator.
         """
         self.inputs = inputs
         self.targets = targets
@@ -45,7 +39,7 @@ class DataProvider(object):
 
     @property
     def batch_size(self):
-        """Number of data points to include in each batch."""
+        """Number of data points per batch."""
         return self._batch_size
 
     @batch_size.setter
@@ -57,7 +51,7 @@ class DataProvider(object):
 
     @property
     def max_num_batches(self):
-        """Maximum number of batches to iterate over in an epoch."""
+        """Maximum number of batches per epoch."""
         return self._max_num_batches
 
     @max_num_batches.setter
@@ -68,10 +62,6 @@ class DataProvider(object):
         self._update_num_batches()
 
     def _update_num_batches(self):
-        """Updates number of batches to iterate over."""
-        # maximum possible number of batches is equal to number of whole times
-        # batch_size divides in to the number of data points which can be
-        # found using integer division
         possible_num_batches = self.inputs.shape[0] // self.batch_size
         if self.max_num_batches == -1:
             self.num_batches = possible_num_batches
@@ -79,16 +69,10 @@ class DataProvider(object):
             self.num_batches = min(self.max_num_batches, possible_num_batches)
 
     def __iter__(self):
-        """Implements Python iterator interface.
-        This should return an object implementing a `next` method which steps
-        through a sequence returning one element at a time and raising
-        `StopIteration` when at the end of the sequence. Here the object
-        returned is the DataProvider itself.
-        """
         return self
 
     def new_epoch(self):
-        """Starts a new epoch (pass through data), possibly shuffling first."""
+        """Start a new epoch, optionally shuffling data."""
         self._curr_batch = 0
         if self.shuffle_order:
             self.shuffle()
@@ -97,7 +81,7 @@ class DataProvider(object):
         return self.next()
 
     def reset(self):
-        """Resets the provider to the initial state."""
+        """Reset the provider to the initial state."""
         inv_perm = np.argsort(self._current_order)
         self._current_order = self._current_order[inv_perm]
         self.inputs = self.inputs[inv_perm]
@@ -105,71 +89,62 @@ class DataProvider(object):
         self.new_epoch()
 
     def shuffle(self):
-        """Randomly shuffles order of data."""
+        """Randomly shuffle data order."""
         perm = self.rng.permutation(self.inputs.shape[0])
         self._current_order = self._current_order[perm]
         self.inputs = self.inputs[perm]
         self.targets = self.targets[perm]
 
     def next(self):
-        """Returns next data batch or raises `StopIteration` if at end."""
+        """Return the next data batch or raise StopIteration."""
         if self._curr_batch + 1 > self.num_batches:
-            # no more batches in current iteration through data set so start
-            # new epoch ready for another pass and indicate iteration is at end
             self.new_epoch()
             raise StopIteration()
-        # create an index slice corresponding to current batch number
-        batch_slice = slice(self._curr_batch * self.batch_size,
-                            (self._curr_batch + 1) * self.batch_size)
+        batch_slice = slice(
+            self._curr_batch * self.batch_size,
+            (self._curr_batch + 1) * self.batch_size,
+        )
         inputs_batch = self.inputs[batch_slice]
         targets_batch = self.targets[batch_slice]
         self._curr_batch += 1
         return inputs_batch, targets_batch
 
-class PascalDataProvider(DataProvider):
-    """Data provider for Pascal VOC 2012 images."""
 
-    def __init__(self, fileNumb, which_set='train', batch_size=100, max_num_batches=-1,
-                 shuffle_order=True, rng=None):
-        """Create a new MNIST data provider object.
-        Args:
-            which_set: One of 'train', 'valid' or 'eval'. Determines which
-                portion of the MNIST data this object should provide.
-            batch_size (int): Number of data points to include in each batch.
-            max_num_batches (int): Maximum number of batches to iterate over
-                in an epoch. If `max_num_batches * batch_size > num_data` then
-                only as many batches as the data can be split into will be
-                used. If set to -1 all of the data will be used.
-            shuffle_order (bool): Whether to randomly permute the order of
-                the data before each epoch.
-            rng (RandomState): A seeded random number generator.
+class PascalDataProvider(DataProvider):
+    """Data provider for brain tumor MRI images stored as .npz files."""
+
+    def __init__(self, fileNumb, which_set='train', batch_size=100,
+                 max_num_batches=-1, shuffle_order=True, rng=None):
         """
-        # check a valid which_set was provided
+        Args:
+            fileNumb: File number suffix for the .npz filenames.
+            which_set: One of 'train', 'valid', or 'test'.
+            batch_size: Number of data points per batch.
+            max_num_batches: Maximum batches per epoch (-1 for all).
+            shuffle_order: Whether to shuffle data before each epoch.
+            rng: A seeded random number generator.
+        """
         assert which_set in ['train', 'valid', 'test'], (
-            'Expected which_set to be either train, valid or eval. '
-            'Got {0}'.format(which_set)
+            'Expected which_set to be train, valid, or test. Got {0}'.format(which_set)
         )
         self.which_set = which_set
-        #self.num_classes = 10
 
-        # construct path to data using os.path.join to ensure the correct path
-        # separator for the current platform / OS is used
-        # Path should point to the data directory
-        data_path = os.path.join("", '../new_data/{0}{1}_input.npz'.format(which_set, fileNumb))
-        assert os.path.isfile(data_path), ('Data file does not exist at expected path: ' + data_path)
-        # load data from compressed numpy file
-        loaded = np.load(data_path)
-        inputs= loaded['arr_0']
-        targets = np.load('../new_data/{0}{1}_target.npz'.format(self.which_set, fileNumb))['arr_0']
-        #inputs, targets = loaded['inputs'], loaded['targets']
-        #inputs = inputs.astype(np.float32)
-        # pass the loaded data to the parent class __init__
-        super(PascalDataProvider, self).__init__(
-            inputs, targets, batch_size, max_num_batches, shuffle_order, rng)
+        data_dir = DEFAULT_CONFIG.data_dir
+        data_path = os.path.join(
+            data_dir, '{0}{1}_input.npz'.format(which_set, fileNumb),
+        )
+        assert os.path.isfile(data_path), (
+            'Data file does not exist at expected path: ' + data_path
+        )
 
+        loaded = np.load(data_path, allow_pickle=True)
+        inputs = loaded['arr_0']
 
-    def next(self):
-        """Returns next data batch or raises `StopIteration` if at end."""
-        inputs_batch, targets_batch = super(PascalDataProvider, self).next()
-        #return inputs_batch, self.to_one_of_k(targets_batch)
-        return inputs_batch, targets_batch
+        target_path = os.path.join(
+            data_dir, '{0}{1}_target.npz'.format(self.which_set, fileNumb),
+        )
+        targets = np.load(target_path, allow_pickle=True)['arr_0']
+
+        super().__init__(
+            inputs, targets, batch_size, max_num_batches, shuffle_order, rng,
+        )

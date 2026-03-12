@@ -1,31 +1,53 @@
-import sys
 import argparse
+import logging
+import os
 
-if "./lib" not in sys.path:
-    sys.path.append("./lib")
+import numpy as np
 
-from lib.DQL_testing import *
+from config import DEFAULT_CONFIG
+from lib.DQL_testing import DQL_testing
 
-if __name__== "__main__":
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluate a model on test set')
 
-    parser.add_argument('-n','--num_episodes', type=int, default=15, help = "Number of episodes that the agent can interact with an image. Default: 15")
-    parser.add_argument('-c','--category', type=str, nargs='+', default=None, help='Indicating the categories are going to be used for testing. You can list name of the classes you want to use in testing, for instnce <-c cat dog>. If you wish to use all classes then you can use *. Default: cat')
-    parser.add_argument('-m','--model_name', type=str, default='default_model', help='The model name that will be loaded for evaluation. Do not forget to put the model under the path ../experiments/model_name. Default: default_model')
-    parser.add_argument('-t','--type',type=str, default=None, help='HGG or LGG my guy')
+    parser.add_argument('-n', '--num_episodes', type=int, default=15,
+                        help="Number of episodes per image. Default: 15")
+    parser.add_argument('-c', '--category', type=str, nargs='+', default=None,
+                        help="Categories for testing (e.g. -c T1ce)")
+    parser.add_argument('-m', '--model_name', type=str, default='default_model',
+                        help="Model name to load. Default: default_model")
+    parser.add_argument('-t', '--type', type=str, default=None,
+                        help="Tumor type: HGG or LGG")
+
     args = parser.parse_args()
 
-    f = open("../experiments/{}_{}_experiments/{}/report/evaluate_{}_{}.txt".format(args.category, args.type, args.model_name, args.category[0],type), 'w')
+    report_dir = os.path.join(
+        DEFAULT_CONFIG.experiments_dir,
+        "{}_{}_experiments".format(args.category[0], args.type),
+        args.model_name, "report",
+    )
+    if not os.path.exists(report_dir):
+        os.makedirs(report_dir)
+
+    report_path = os.path.join(
+        report_dir,
+        "evaluate_{}_{}.txt".format(args.category[0], args.type),
+    )
+    f = open(report_path, 'w')
+
     MAP = []
     for category in args.category:
-        print("{} images are being evaluated... \n\n\n\n".format(category))
-        MAP.append(DQL_testing(args.num_episodes,
-            category,
-            args.model_name,
-            args.type))
+        logger.info("%s images are being evaluated...", category)
+        MAP.append(DQL_testing(args.num_episodes, category, args.model_name, args.type))
         f.write("Precision for {} category: {}\n".format(category, MAP[-1]))
-    
-    f.write("MAP over the given category(s): {}\n".format(np.mean(MAP)))
-    print("MAP over the given category(s): {}".format(np.mean(MAP)))
+
+    mean_map = np.mean(MAP)
+    f.write("MAP over the given category(s): {}\n".format(mean_map))
+    logger.info("MAP over the given category(s): %s", mean_map)
     f.close()
