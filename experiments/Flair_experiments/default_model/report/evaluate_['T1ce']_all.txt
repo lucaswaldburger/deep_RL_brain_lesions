@@ -1,0 +1,2 @@
+Precision for T1ce category: 0.0529741863075
+MAP over the given category(s): 0.0529741863075

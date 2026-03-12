@@ -1,0 +1,2 @@
+Precision for Flair category: 0.109172259508
+MAP over the given category(s): 0.109172259508

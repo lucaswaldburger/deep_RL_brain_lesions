@@ -1,0 +1,3 @@
+model_checkpoint_path: "/data/transfer/cs285_final_project/experiments/default_model/checkpoints/model"
+all_model_checkpoint_paths: "/data/transfer/cs285_final_project/experiments/default_model/bestModel/model"
+all_model_checkpoint_paths: "/data/transfer/cs285_final_project/experiments/default_model/checkpoints/model"
